@@ -1,0 +1,66 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Jan 15 19:09:29 2021
+
+@author: masonlien
+"""
+
+#%%
+
+import rasterio
+import fiona
+import numpy as np
+from rasterio.mask import mask
+import shapefile as shp
+from openpyxl import load_workbook
+import os
+import shutil
+
+wb_yield = '/path/toYield.xlsx'
+wb_output = '/path/to/Output.xlsx'
+multispec = "/path/to/2020_0518_Orthomosaic_Multi_Raw.tif"
+
+#%%
+if os.path.exists(wb_output):
+    os.remove(wb_output)
+    shutil.copyfile(wb_yield, wb_output)
+    print('Output file created: Output.xlsx')
+else:
+    shutil.copyfile(wb_yield, wb_output)
+    print('Output file created: Output.xlsx')
+    
+#%%
+with fiona.open("path/to/shapefile.shp", "r") as shapefile:
+    recs = shapefile.shapeRecords()
+    count = 0
+    wb = load_workbook(wb_output)
+    ws = wb.active
+    for feature in shapefile:
+        shape =[feature["geometry"]]
+        plotNum = recs[count].record[2]
+        sheetRef = plotNum + 1
+        #open and mask the multispectral image to the plot
+        with rasterio.open(multispec) as src:
+            out_image, out_transform = rasterio.mask.mask(src, shape, crop = True)
+            out_meta = src.meta
+
+            #calculate NDVI, NDRE, Canopy Coverage
+            
+            #extract color bands
+            red = out_image[0,:,:].astype('float64')
+            nir = out_image[3,:,:].astype('float64')
+            red_edge = out_image[4,:,:].astype("float64")
+                
+            #ndvi           
+            num = np.subtract(nir, red)
+            denom = np.add(nir, red)
+            np.seterr('ignore', 'ignore')
+            ndvi = np.divide(num, denom)
+            
+            flatndvi = ndvi.flatten()
+            avg_ndvi = np.nanmean(flatndvi)
+            
+            cell = ws['c' + str(sheetRef)]
+            cell.value = avg_ndvi
+            wb.save(wb_output)
